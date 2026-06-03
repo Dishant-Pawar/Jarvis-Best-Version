@@ -55,88 +55,67 @@ class GeminiService:
             return self._fallback_chat(prompt)
 
     def parse_intent(self, text: str) -> Dict[str, Any]:
-        """Use Gemini to translate a natural language command into structured JSON execution blocks."""
-        current_time_str = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-        
-        system_instruction = (
-            f"You are the intent parser for JARVIS, a Windows desktop assistant.\n"
-            f"Your job is to parse the user's spoken command into a structured JSON object.\n"
-            f"Current local time: {current_time_str}\n\n"
-            "Supported intents, actions, and expected parameters:\n"
-            "1. intent: 'open_app'\n"
-            "   - action: 'open_notepad' | 'open_calculator' | 'open_command_prompt' | 'open_file_explorer' | 'open_control_panel' | 'open_settings' | 'open_camera' | 'open_chrome' | 'open_vscode'\n"
-            "2. intent: 'pc_control'\n"
-            "   - action: 'volume_up' | 'volume_down' | 'mute' | 'unmute' | 'brightness_increase' | 'brightness_decrease' | 'screenshot' | 'wifi_on' | 'wifi_off' | 'bluetooth_on' | 'bluetooth_off' | 'lock_pc' | 'shutdown' | 'restart' | 'sleep'\n"
-            "3. intent: 'file_operation'\n"
-            "   - action: 'open_folder' (params: 'path')\n"
-            "   - action: 'create_file' (params: 'path', 'content')\n"
-            "   - action: 'delete_file' (params: 'path')\n"
-            "   - action: 'open_downloads' (params: None)\n"
-            "   - action: 'search_files' (params: 'keyword')\n"
-            "   - action: 'rename_file_or_folder' (params: 'old_path', 'new_path')\n"
-            "   - action: 'move_file' (params: 'path', 'destination')\n"
-            "   - action: 'copy_file' (params: 'path')\n"
-            "   - action: 'paste_file' (params: 'destination')\n"
-            "   - action: 'open_recent' (params: None)\n"
-            "   - action: 'open_specific_file' (params: 'path')\n"
-            "   - action: 'create_folder' (params: 'path')\n"
-            "   - action: 'delete_folder' (params: 'path')\n"
-            "   - action: 'organize_files' (params: 'path')\n"
-            "4. intent: 'alarm_reminder'\n"
-            "   - action: 'set_reminder' (params: 'text', 'trigger_time' formatted in ISO-8601 YYYY-MM-DDTHH:MM:SS based on current time context)\n"
-            "   - action: 'delete_reminder' (params: 'keyword')\n"
-            "   - action: 'list_reminders' (params: None)\n"
-            "   - action: 'set_alarm' (params: 'time_hhmm' in 24-hour 'HH:MM', 'label')\n"
-            "   - action: 'stop_alarm' (params: None)\n"
-            "   - action: 'delete_alarm' (params: 'time_hhmm' in 'HH:MM')\n"
-            "5. intent: 'email'\n"
-            "   - action: 'send_email' (params: 'to_email', 'subject', 'body')\n"
-            "   - action: 'read_emails' (params: None)\n"
-            "6. intent: 'weather'\n"
-            "   - action: 'get_weather' (params: 'city')\n"
-            "7. intent: 'news'\n"
-            "   - action: 'get_news' (params: 'country')\n"
-            "8. intent: 'voice_typing'\n"
-            "   - action: 'start_typing' (params: None)\n"
-            "9. intent: 'chat'\n"
-            "   - action: 'general_conversation' (params: None)\n\n"
-            "Examples:\n"
-            "- 'Open Notepad' -> {\"intent\": \"open_app\", \"action\": \"open_notepad\", \"params\": {}}\n"
-            "- 'Remind me to call Rahul at 6 PM' -> Compute 6 PM from current time. E.g. if today is 2026-06-03, 6 PM is '2026-06-03T18:00:00'. -> {\"intent\": \"alarm_reminder\", \"action\": \"set_reminder\", \"params\": {\"text\": \"call Rahul\", \"trigger_time\": \"2026-06-03T18:00:00\"}}\n"
-            "- 'Rename old.txt to new.txt' -> {\"intent\": \"file_operation\", \"action\": \"rename_file_or_folder\", \"params\": {\"old_path\": \"old.txt\", \"new_path\": \"new.txt\"}}\n"
-            "- 'Send email to john@example.com' -> {\"intent\": \"email\", \"action\": \"send_email\", \"params\": {\"to_email\": \"john@example.com\", \"subject\": \"\", \"body\": \"\"}}\n\n"
-            "Output ONLY valid raw JSON without any markdown code block formatting (no ```json and no ```). If no command fits, return intent: 'chat' and action: 'general_conversation'."
-        )
+        """
+        Parse natural language command into structured intent.
 
-        if not self.api_available:
-            return self._fallback_intent_parser(text)
+        Strategy:
+        1. Run the local rule-based parser first (fast, no API quota).
+        2. If the local parser confidently recognises the command (non-chat intent),
+           return immediately — no Gemini call needed.
+        3. Only call Gemini for genuine free-form conversation ('chat' intent),
+           where the LLM's language understanding actually adds value.
+        """
+        # --- Step 1: Try local rule-based parser ---
+        local_result = self._fallback_intent_parser(text)
+        local_intent = local_result.get("intent", "chat")
 
-        try:
-            import google.generativeai as genai
-            
-            response = self.model.generate_content(
-                [system_instruction, f"Parse command: '{text}'"],
-                generation_config=genai.types.GenerationConfig(
-                    temperature=0.1,  # Low temp for deterministic structured output
-                    max_output_tokens=200,
-                )
+        # If local parser matched a structured intent, use it immediately
+        if local_intent != "chat":
+            logger.info(f"Local parser matched: {local_result}")
+            return local_result
+
+        # --- Step 2: For alarms/reminders with specific times, prefer Gemini ---
+        # because it can correctly compute relative times ("in 5 minutes", "tomorrow at 3pm")
+        needs_time_calc = any(kw in text.lower() for kw in [
+            "remind me", "set alarm", "alarm for", "reminder for",
+            "in 5 minutes", "in an hour", "tomorrow", "at ", "pm", "am"
+        ])
+
+        # --- Step 3: Call Gemini only when needed and available ---
+        if self.api_available and needs_time_calc:
+            current_time_str = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+            system_instruction = (
+                f"You are the intent parser for JARVIS, a Windows desktop assistant.\n"
+                f"Your job is to parse the user's spoken command into a structured JSON object.\n"
+                f"Current local time: {current_time_str}\n\n"
+                "Supported intents:\n"
+                "- intent: 'alarm_reminder', action: 'set_reminder' (params: 'text', 'trigger_time' in ISO-8601 YYYY-MM-DDTHH:MM:SS)\n"
+                "- intent: 'alarm_reminder', action: 'set_alarm' (params: 'time_hhmm' in 24hr 'HH:MM', 'label')\n"
+                "- intent: 'chat', action: 'general_conversation' (params: none)\n\n"
+                "Output ONLY valid raw JSON without markdown code blocks."
             )
-            raw_response = response.text.strip()
-            # Remove any markdown wrapping if the LLM outputted it anyway
-            if raw_response.startswith("```"):
-                lines = raw_response.splitlines()
-                if lines[0].startswith("```"):
-                    lines = lines[1:]
-                if lines[-1].startswith("```"):
-                    lines = lines[:-1]
-                raw_response = "\n".join(lines).strip()
-            
-            parsed = json.loads(raw_response)
-            logger.info(f"Gemini Intent Parsing Succeeded: {parsed}")
-            return parsed
-        except Exception as e:
-            logger.error(f"Gemini intent parsing failed: {e}")
-            return self._fallback_intent_parser(text)
+            try:
+                import google.generativeai as genai
+                response = self.model.generate_content(
+                    [system_instruction, f"Parse command: '{text}'"],
+                    generation_config=genai.types.GenerationConfig(
+                        temperature=0.1,
+                        max_output_tokens=150,
+                    )
+                )
+                raw = response.text.strip()
+                if raw.startswith("```"):
+                    lines = raw.splitlines()
+                    raw = "\n".join(lines[1:-1] if lines[-1].startswith("```") else lines[1:]).strip()
+                parsed = json.loads(raw)
+                logger.info(f"Gemini parsed alarm/reminder: {parsed}")
+                return parsed
+            except Exception as e:
+                logger.warning(f"Gemini call failed ({e}), using local fallback.")
+
+        # --- Step 4: Return the local 'chat' result (general conversation) ---
+        return local_result
+
 
     def _fallback_chat(self, prompt: str) -> str:
         """Rule-based simulation fallback chat."""
@@ -151,120 +130,210 @@ class GeminiService:
             return "Sir, I have recorded your input, but I am currently running without a Gemini connection. Please configure your API key."
 
     def _fallback_intent_parser(self, text: str) -> Dict[str, Any]:
-        """Rule-based simple intent parser when Gemini is unavailable."""
-        text_l = text.lower().replace("-", "")
-        logger.debug(f"Executing rule-based local command matching for: '{text}' (normalized: '{text_l}')")
-        
-        # 1. Apps
-        if "notepad" in text_l:
+        """Comprehensive rule-based intent parser when Gemini is unavailable."""
+        import re
+        t = text.lower().strip()
+        logger.debug(f"Fallback parsing: '{t}'")
+
+        # Helper: extract trailing name after a prefix phrase
+        def after(prefix: str, src: str = t) -> str:
+            idx = src.find(prefix)
+            if idx == -1:
+                return ""
+            return src[idx + len(prefix):].strip()
+
+        # ── 1. OPEN APP ──────────────────────────────────────────────────────
+        if "notepad" in t:
             return {"intent": "open_app", "action": "open_notepad", "params": {}}
-        elif "calculator" in text_l or "calc" in text_l:
+        if "calculator" in t or "calc" in t:
             return {"intent": "open_app", "action": "open_calculator", "params": {}}
-        elif "command prompt" in text_l or "cmd" in text_l:
+        if "command prompt" in t or " cmd" in t:
             return {"intent": "open_app", "action": "open_command_prompt", "params": {}}
-        elif "explorer" in text_l:
+        if "file explorer" in t or "explorer" in t:
             return {"intent": "open_app", "action": "open_file_explorer", "params": {}}
-        elif "control panel" in text_l:
+        if "control panel" in t:
             return {"intent": "open_app", "action": "open_control_panel", "params": {}}
-        elif "settings" in text_l:
+        if "settings" in t:
             return {"intent": "open_app", "action": "open_settings", "params": {}}
-        elif "camera" in text_l:
+        if "camera" in t:
             return {"intent": "open_app", "action": "open_camera", "params": {}}
-        elif "chrome" in text_l or "google chrome" in text_l or "launch chrome" in text_l:
+        if "chrome" in t:
             return {"intent": "open_app", "action": "open_chrome", "params": {}}
-        elif "vs code" in text_l or "vscode" in text_l:
+        if "vs code" in t or "vscode" in t or "visual studio code" in t:
             return {"intent": "open_app", "action": "open_vscode", "params": {}}
-            
-        # 2. Volume / Brightness / Controls
-        elif "volume up" in text_l or "increase volume" in text_l or "volume increase" in text_l:
+
+        # ── 2. PC CONTROL ────────────────────────────────────────────────────
+        if "volume up" in t or "increase volume" in t:
             return {"intent": "pc_control", "action": "volume_up", "params": {}}
-        elif "volume down" in text_l or "decrease volume" in text_l or "volume decrease" in text_l:
+        if "volume down" in t or "decrease volume" in t:
             return {"intent": "pc_control", "action": "volume_down", "params": {}}
-        elif "unmute" in text_l:
+        if "unmute" in t:
             return {"intent": "pc_control", "action": "unmute", "params": {}}
-        elif "mute" in text_l:
+        if "mute" in t:
             return {"intent": "pc_control", "action": "mute", "params": {}}
-        elif "increase brightness" in text_l or "brightness increase" in text_l or "brighter" in text_l:
+        if "brighter" in t or "increase brightness" in t or "brightness up" in t:
             return {"intent": "pc_control", "action": "brightness_increase", "params": {}}
-        elif "decrease brightness" in text_l or "brightness decrease" in text_l or "dim" in text_l:
+        if "dim" in t or "decrease brightness" in t or "brightness down" in t:
             return {"intent": "pc_control", "action": "brightness_decrease", "params": {}}
-        elif "screenshot" in text_l or "take screen" in text_l:
+        if "screenshot" in t or "take screen" in t or "screen shot" in t:
             return {"intent": "pc_control", "action": "screenshot", "params": {}}
-        elif "wifi on" in text_l or "enable wifi" in text_l:
+        if "wifi on" in t or "wi-fi on" in t or "enable wifi" in t or "turn on wifi" in t:
             return {"intent": "pc_control", "action": "wifi_on", "params": {}}
-        elif "wifi off" in text_l or "disable wifi" in text_l:
+        if "wifi off" in t or "wi-fi off" in t or "disable wifi" in t or "turn off wifi" in t:
             return {"intent": "pc_control", "action": "wifi_off", "params": {}}
-        elif "bluetooth on" in text_l:
+        if "bluetooth on" in t or "enable bluetooth" in t or "turn on bluetooth" in t:
             return {"intent": "pc_control", "action": "bluetooth_on", "params": {}}
-        elif "bluetooth off" in text_l:
+        if "bluetooth off" in t or "disable bluetooth" in t or "turn off bluetooth" in t:
             return {"intent": "pc_control", "action": "bluetooth_off", "params": {}}
-        elif "lock pc" in text_l or "lock computer" in text_l or "lock workstation" in text_l:
+        if "lock" in t and ("pc" in t or "computer" in t or "screen" in t or "workstation" in t):
             return {"intent": "pc_control", "action": "lock_pc", "params": {}}
-        elif "sleep" in text_l:
+        if "sleep" in t:
             return {"intent": "pc_control", "action": "sleep", "params": {}}
-        elif "shutdown" in text_l:
+        if "shutdown" in t or "shut down" in t:
             return {"intent": "pc_control", "action": "shutdown", "params": {}}
-        elif "restart" in text_l:
+        if "restart" in t or "reboot" in t:
             return {"intent": "pc_control", "action": "restart", "params": {}}
 
-        # 3. File Operations
-        elif "downloads folder" in text_l or "downloads" in text_l:
+        # ── 3. FILE OPERATIONS ───────────────────────────────────────────────
+        # Open Downloads
+        if "download" in t and ("open" in t or "folder" in t or "show" in t):
             return {"intent": "file_operation", "action": "open_downloads", "params": {}}
-        elif "create file" in text_l:
-            # "create file notes.txt" -> extract name
-            parts = text.split("create file")
-            filename = parts[1].strip() if len(parts) > 1 else "untitled.txt"
-            return {"intent": "file_operation", "action": "create_file", "params": {"path": filename, "content": ""}}
-        elif "delete file" in text_l:
-            parts = text.split("delete file")
-            filename = parts[1].strip() if len(parts) > 1 else ""
-            return {"intent": "file_operation", "action": "delete_file", "params": {"path": filename}}
-        elif "rename file" in text_l:
-            # "rename file old.txt to new.txt"
-            # very basic splitter
-            text_norm = text_l.replace("rename file ", "")
-            parts = text_norm.split(" to ")
-            if len(parts) == 2:
-                return {"intent": "file_operation", "action": "rename_file_or_folder", "params": {"old_path": parts[0].strip(), "new_path": parts[1].strip()}}
-            return {"intent": "file_operation", "action": "rename_file_or_folder", "params": {"old_path": "", "new_path": ""}}
-        
-        # 4. Dictation Mode
-        elif "start voice typing" in text_l or "start typing" in text_l:
+
+        # Open Recent
+        if "recent" in t and ("file" in t or "open" in t or "show" in t):
+            return {"intent": "file_operation", "action": "open_recent", "params": {}}
+
+        # Organize Files
+        if "organize" in t:
+            for folder in ["desktop", "downloads", "documents", "pictures", "videos", "music"]:
+                if folder in t:
+                    return {"intent": "file_operation", "action": "organize_files", "params": {"path": folder}}
+            return {"intent": "file_operation", "action": "organize_files", "params": {"path": "downloads"}}
+
+        # List folder contents
+        if re.search(r'(list|show|what.?s in|contents? of)', t):
+            for kw, folder in [("desktop", "desktop"), ("downloads", "downloads"),
+                               ("documents", "documents"), ("pictures", "pictures"),
+                               ("videos", "videos"), ("music", "music")]:
+                if kw in t:
+                    return {"intent": "file_operation", "action": "list_folder", "params": {"path": folder}}
+            name = re.sub(r'(list|show|what.?s in|contents? of|folder|the|my)', '', t).strip()
+            return {"intent": "file_operation", "action": "list_folder", "params": {"path": name}}
+
+        # Move file/folder: "move X to Y"
+        mv = re.search(r'move (.+?) to (.+)', t)
+        if mv:
+            return {"intent": "file_operation", "action": "move_file",
+                    "params": {"path": mv.group(1).strip(), "destination": mv.group(2).strip()}}
+
+        # Rename: "rename X to Y"
+        rn = re.search(r'rename (.+?) to (.+)', t)
+        if rn:
+            return {"intent": "file_operation", "action": "rename_file_or_folder",
+                    "params": {"old_path": rn.group(1).strip(), "new_path": rn.group(2).strip()}}
+
+        # Delete file
+        if re.search(r'delete (file|the file)', t):
+            name = re.sub(r'delete (the )?file( named| called)?', '', t).strip()
+            return {"intent": "file_operation", "action": "delete_file", "params": {"path": name}}
+
+        # Delete folder
+        if re.search(r'delete (folder|directory|the folder)', t):
+            name = re.sub(r'delete (the )?(folder|directory)( named| called)?', '', t).strip()
+            return {"intent": "file_operation", "action": "delete_folder", "params": {"path": name}}
+
+        # Create file
+        if re.search(r'create (a |new )?(file|document|text)', t):
+            name = re.sub(r'create (a |new )?(file|document|text file|text)( named| called)?', '', t).strip()
+            if not name:
+                name = "untitled.txt"
+            return {"intent": "file_operation", "action": "create_file", "params": {"path": name, "content": ""}}
+
+        # Create folder
+        if re.search(r'create (a |new )?(folder|directory)', t):
+            name = re.sub(r'create (a |new )?(folder|directory)( named| called)?', '', t).strip()
+            if not name:
+                name = "New Folder"
+            return {"intent": "file_operation", "action": "create_folder", "params": {"path": name}}
+
+        # Copy file
+        if re.search(r'copy (file|the file)?', t):
+            name = re.sub(r'copy (the )?(file)?( named| called)?', '', t).strip()
+            return {"intent": "file_operation", "action": "copy_file", "params": {"path": name}}
+
+        # Paste file
+        if "paste" in t:
+            dest = re.sub(r'paste( file| it)?(( to| in| into| on)( the)?)?', '', t).strip()
+            dest = dest if dest else "desktop"
+            return {"intent": "file_operation", "action": "paste_file", "params": {"destination": dest}}
+
+        # Search files by name
+        if re.search(r'(search|find|look for|locate) (file|files|for)', t):
+            kw = re.sub(r'(search|find|look for|locate) (for )?(files?|document|the)?( named| called)?', '', t).strip()
+            kw = re.sub(r'^for\s+', '', kw).strip()  # strip leading 'for'
+            return {"intent": "file_operation", "action": "search_files", "params": {"keyword": kw}}
+
+        # Search documents by content
+        if re.search(r'(search|find).+(document|content|text|contain)', t):
+            kw = re.sub(r'(search|find|look for).+(in|containing|with|about|inside)', '', t).strip()
+            return {"intent": "file_operation", "action": "search_documents", "params": {"keyword": kw}}
+
+        # Open specific folder
+        if re.search(r'open (folder|folders|directory)', t):
+            name = re.sub(r'open (the )?(folder[s]?|directory)( named| called)?', '', t).strip()
+            # resolve common spoken aliases like 'document' -> 'documents'
+            spoken_aliases = {
+                'document': 'documents', 'download': 'downloads',
+                'picture': 'pictures', 'video': 'videos',
+                'music': 'music', 'desktop': 'desktop',
+            }
+            name = spoken_aliases.get(name, name)
+            return {"intent": "file_operation", "action": "open_folder", "params": {"path": name}}
+
+        # Open specific file — "open file X", "open the X.pdf", or "open X.pdf"
+        if re.search(r'open (file|the file)', t):
+            name = re.sub(r'open (the )?(file)?( named| called)?', '', t).strip()
+            return {"intent": "file_operation", "action": "open_specific_file", "params": {"path": name}}
+        # Catch "open X.ext" where the filename has a known file extension
+        file_ext_match = re.search(r'open\s+([\w\s\-]+\.(pdf|docx?|xlsx?|pptx?|txt|png|jpg|mp4|mp3|zip|py|js|html|csv|json))', t)
+        if file_ext_match:
+            name = file_ext_match.group(1).strip()
+            return {"intent": "file_operation", "action": "open_specific_file", "params": {"path": name}}
+
+
+        # ── 4. VOICE TYPING ──────────────────────────────────────────────────
+        if "start voice typing" in t or "start typing" in t or "voice type" in t:
             return {"intent": "voice_typing", "action": "start_typing", "params": {}}
 
-        # 5. Email
-        elif "send email to" in text_l:
-            # "send email to john@example.com"
-            parts = text_l.split("send email to")
-            email_addr = parts[1].strip() if len(parts) > 1 else ""
-            return {"intent": "email", "action": "send_email", "params": {"to_email": email_addr, "subject": "", "body": ""}}
-        elif "read email" in text_l:
+        # ── 5. EMAIL ─────────────────────────────────────────────────────────
+        if "send email to" in t:
+            addr = after("send email to")
+            return {"intent": "email", "action": "send_email",
+                    "params": {"to_email": addr, "subject": "", "body": ""}}
+        if "read email" in t or "check email" in t:
             return {"intent": "email", "action": "read_emails", "params": {}}
 
-        # 6. Alarms / Reminders
-        elif "stop alarm" in text_l:
+        # ── 6. ALARMS / REMINDERS ────────────────────────────────────────────
+        if "stop alarm" in t:
             return {"intent": "alarm_reminder", "action": "stop_alarm", "params": {}}
-        elif "list reminders" in text_l:
+        if "list reminder" in t or "show reminder" in t:
             return {"intent": "alarm_reminder", "action": "list_reminders", "params": {}}
-        elif "remind me to" in text_l:
-            # Simple fallback reminder set: 5 minutes from now
-            rem_text = text.replace("remind me to ", "").strip()
-            trigger_time = (datetime.now() + timedelta(minutes=5)).isoformat()
-            return {"intent": "alarm_reminder", "action": "set_reminder", "params": {"text": rem_text, "trigger_time": trigger_time}}
-        elif "set alarm for" in text_l:
-            # extract alarm time "alarm for 08:30"
-            import re
-            match = re.search(r'(\d{1,2})[.:](\d{2})', text_l)
-            if match:
-                hh, mm = match.groups()
-                time_str = f"{int(hh):02d}:{int(mm):02d}"
-                return {"intent": "alarm_reminder", "action": "set_alarm", "params": {"time_hhmm": time_str, "label": "Alarm"}}
-            return {"intent": "alarm_reminder", "action": "set_alarm", "params": {"time_hhmm": "08:00", "label": "Alarm"}}
+        if "remind me to" in t:
+            from datetime import timedelta
+            rem_text = after("remind me to")
+            trigger = (datetime.now() + timedelta(minutes=5)).isoformat()
+            return {"intent": "alarm_reminder", "action": "set_reminder",
+                    "params": {"text": rem_text, "trigger_time": trigger}}
+        if "set alarm" in t or "alarm for" in t:
+            m = re.search(r'(\d{1,2})[.:]?(\d{2})', t)
+            hhmm = f"{int(m.group(1)):02d}:{int(m.group(2)):02d}" if m else "08:00"
+            return {"intent": "alarm_reminder", "action": "set_alarm",
+                    "params": {"time_hhmm": hhmm, "label": "Alarm"}}
 
         # 7. Weather
-        elif "weather" in text_l or "temp" in text_l or "temperature" in text_l:
+        elif "weather" in t or "temp" in t or "temperature" in t:
             import re
-            clean_text = text_l
+            clean_text = t
 
             # Step 1: Remove multi-word filler phrases (order longest first)
             filler_phrases = [
@@ -310,7 +379,7 @@ class GeminiService:
 
 
         # 8. News
-        elif "news" in text_l:
+        elif "news" in t:
             return {"intent": "news", "action": "get_news", "params": {"country": "us"}}
 
         # Default Chat

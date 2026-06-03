@@ -306,84 +306,148 @@ class Assistant(QObject):
 
         # -- 3. FILE OPERATIONS INTENT --
         elif intent == "file_operation":
-            path = params.get("path", "")
-            dest = params.get("destination", "")
-            keyword = params.get("keyword", "")
-            
+            path     = params.get("path", "")
+            dest     = params.get("destination", "")
+            keyword  = params.get("keyword", "")
+            old_path = params.get("old_path", "")
+            new_path = params.get("new_path", "")
+            content  = params.get("content", "")
+
             if action == "open_downloads":
                 FileManager.open_downloads_folder()
-                self.speak("Opening downloads folder.", post_action="enter_wake_mode")
+                self.speak("Opening your Downloads folder, Sir.", post_action="enter_wake_mode")
+
             elif action == "open_folder":
-                if FileManager.open_folder(path):
-                    self.speak(f"Opening folder {os.path.basename(path)}.", post_action="enter_wake_mode")
+                ok, result = FileManager.open_folder(path)
+                if ok:
+                    self.speak(f"Opening folder {os.path.basename(result)}, Sir.", post_action="enter_wake_mode")
                 else:
-                    self.speak(f"Folder {path} could not be found.", post_action="enter_wake_mode")
+                    self.speak(f"Sorry Sir, I could not find the folder '{path}'.", post_action="enter_wake_mode")
+
             elif action == "open_specific_file":
-                if FileManager.open_specific_file(path):
-                    self.speak(f"Opening file {os.path.basename(path)}.", post_action="enter_wake_mode")
+                ok, result = FileManager.open_specific_file(path)
+                if ok:
+                    self.speak(f"Opening file {os.path.basename(result)}, Sir.", post_action="enter_wake_mode")
                 else:
-                    self.speak(f"File {path} could not be found.", post_action="enter_wake_mode")
-            elif action == "create_file":
-                content = params.get("content", "")
-                if FileManager.create_file(path, content):
-                    self.speak(f"Created file {os.path.basename(path)}.", post_action="enter_wake_mode")
-                else:
-                    self.speak(f"Failed to create file {os.path.basename(path)}.", post_action="enter_wake_mode")
-            elif action == "delete_file":
-                if FileManager.delete_file(path):
-                    self.speak(f"Deleted file {os.path.basename(path)}.", post_action="enter_wake_mode")
-                else:
-                    self.speak(f"File {os.path.basename(path)} not found or couldn't be deleted.", post_action="enter_wake_mode")
-            elif action == "create_folder":
-                if FileManager.create_folder(path):
-                    self.speak(f"Created folder {os.path.basename(path)}.", post_action="enter_wake_mode")
-                else:
-                    self.speak(f"Failed to create folder {os.path.basename(path)}.", post_action="enter_wake_mode")
-            elif action == "delete_folder":
-                if FileManager.delete_folder(path):
-                    self.speak(f"Deleted folder {os.path.basename(path)}.", post_action="enter_wake_mode")
-                else:
-                    self.speak(f"Folder {os.path.basename(path)} not found.", post_action="enter_wake_mode")
-            elif action == "rename_file_or_folder":
-                old_p = params.get("old_path", "")
-                new_p = params.get("new_path", "")
-                if FileManager.rename_file_or_folder(old_p, new_p):
-                    self.speak(f"Renamed {os.path.basename(old_p)} to {os.path.basename(new_p)}.", post_action="enter_wake_mode")
-                else:
-                    self.speak("I was unable to perform the rename operation.", post_action="enter_wake_mode")
-            elif action == "copy_file":
-                if FileManager.copy_file(path):
-                    self.speak(f"Copied {os.path.basename(path)} to clipboard.", post_action="enter_wake_mode")
-                else:
-                    self.speak("Could not copy specified file.", post_action="enter_wake_mode")
-            elif action == "paste_file":
-                if FileManager.paste_file(dest):
-                    self.speak("Pasted file successfully.", post_action="enter_wake_mode")
-                else:
-                    self.speak("Failed to paste file. Ensure destination is valid.", post_action="enter_wake_mode")
-            elif action == "search_files":
-                results = FileManager.search_files(keyword)
-                if results:
-                    summary = f"I found {len(results)} matches. The first one is at {results[0]}."
-                    self.speak(summary, post_action="enter_wake_mode")
-                else:
-                    self.speak(f"No files matching '{keyword}' were found, Sir.", post_action="enter_wake_mode")
+                    self.speak(f"Sorry Sir, I could not find the file '{path}'.", post_action="enter_wake_mode")
+
             elif action == "open_recent":
                 recent = FileManager.get_recent_files(limit=3)
                 if recent:
-                    basenames = [os.path.basename(f) for f in recent]
-                    self.speak(f"Your most recent files are: {', '.join(basenames)}.", post_action="enter_wake_mode")
+                    names = ", ".join(os.path.basename(f) for f in recent)
+                    self.speak(f"Your most recent files are: {names}.", post_action="enter_wake_mode")
                 else:
-                    self.speak("No recent files list available.", post_action="enter_wake_mode")
+                    self.speak("No recent files found, Sir.", post_action="enter_wake_mode")
+
+            elif action == "create_file":
+                ok, result = FileManager.create_file(path or "untitled.txt", content)
+                if ok:
+                    self.speak(f"File {os.path.basename(result)} created on Desktop, Sir.", post_action="enter_wake_mode")
+                else:
+                    self.speak(f"Sorry Sir, I could not create the file. {result}", post_action="enter_wake_mode")
+
+            elif action == "create_folder":
+                ok, result = FileManager.create_folder(path or "New Folder")
+                if ok:
+                    self.speak(f"Folder {os.path.basename(result)} created on Desktop, Sir.", post_action="enter_wake_mode")
+                else:
+                    self.speak(f"Sorry Sir, I could not create the folder. {result}", post_action="enter_wake_mode")
+
+            elif action == "delete_file":
+                ok, result = FileManager.delete_file(path)
+                if ok:
+                    self.speak(f"File {os.path.basename(result)} deleted, Sir.", post_action="enter_wake_mode")
+                else:
+                    self.speak(f"Sorry Sir, I could not find or delete the file '{path}'.", post_action="enter_wake_mode")
+
+            elif action == "delete_folder":
+                ok, result = FileManager.delete_folder(path)
+                if ok:
+                    self.speak(f"Folder {os.path.basename(result)} deleted, Sir.", post_action="enter_wake_mode")
+                else:
+                    self.speak(f"Sorry Sir, I could not find or delete the folder '{path}'.", post_action="enter_wake_mode")
+
+            elif action == "rename_file_or_folder":
+                ok, result = FileManager.rename_file_or_folder(old_path, new_path)
+                if ok:
+                    self.speak(f"Renamed to {os.path.basename(result)}, Sir.", post_action="enter_wake_mode")
+                else:
+                    self.speak(f"Sorry Sir, I could not rename '{old_path}'. {result}", post_action="enter_wake_mode")
+
+            elif action == "move_file":
+                ok, result = FileManager.move_file_or_folder(path, dest)
+                if ok:
+                    self.speak(f"Moved {os.path.basename(result)} to {dest}, Sir.", post_action="enter_wake_mode")
+                else:
+                    self.speak(f"Sorry Sir, I could not move '{path}' to '{dest}'. {result}", post_action="enter_wake_mode")
+
+            elif action == "copy_file":
+                ok, result = FileManager.copy_file(path)
+                if ok:
+                    self.speak(f"Copied {os.path.basename(result)} to clipboard, Sir.", post_action="enter_wake_mode")
+                else:
+                    self.speak(f"Sorry Sir, I could not find '{path}' to copy.", post_action="enter_wake_mode")
+
+            elif action == "paste_file":
+                ok, result = FileManager.paste_file(dest or "desktop")
+                if ok:
+                    self.speak(f"Pasted file to {dest}, Sir.", post_action="enter_wake_mode")
+                else:
+                    self.speak(f"Sorry Sir, I could not paste. {result}", post_action="enter_wake_mode")
+
+            elif action == "search_files":
+                results = FileManager.search_files(keyword)
+                if results:
+                    count = len(results)
+                    first = os.path.basename(results[0])
+                    loc   = os.path.dirname(results[0])
+                    self.speak(
+                        f"Sir, I found {count} match{'es' if count > 1 else ''} for '{keyword}'. "
+                        f"The first one is {first} in {os.path.basename(loc)}.",
+                        post_action="enter_wake_mode"
+                    )
+                else:
+                    self.speak(f"No files matching '{keyword}' were found, Sir.", post_action="enter_wake_mode")
+
+            elif action == "search_documents":
+                results = FileManager.search_documents_by_content(keyword)
+                if results:
+                    count = len(results)
+                    first = os.path.basename(results[0])
+                    self.speak(
+                        f"Sir, I found {count} document{'s' if count > 1 else ''} containing '{keyword}'. "
+                        f"The first one is {first}.",
+                        post_action="enter_wake_mode"
+                    )
+                else:
+                    self.speak(f"No documents containing '{keyword}' were found, Sir.", post_action="enter_wake_mode")
+
+            elif action == "list_folder":
+                ok, entries = FileManager.list_folder_contents(path)
+                if ok and entries:
+                    count = len(entries)
+                    preview = ", ".join(entries[:5])
+                    more = f" and {count - 5} more" if count > 5 else ""
+                    self.speak(
+                        f"Sir, {os.path.basename(path)} contains {count} item{'s' if count > 1 else ''}. "
+                        f"Including: {preview}{more}.",
+                        post_action="enter_wake_mode"
+                    )
+                elif ok:
+                    self.speak(f"The folder '{path}' is empty, Sir.", post_action="enter_wake_mode")
+                else:
+                    self.speak(f"Sorry Sir, I could not find the folder '{path}'.", post_action="enter_wake_mode")
+
             elif action == "organize_files":
-                organize_path = params.get("path", "")
-                # If path empty, organize downloads
-                if not organize_path:
-                    organize_path = FileManager.get_downloads_path()
-                if FileManager.organize_files_automatically(organize_path):
-                    self.speak(f"Files organized automatically in folder {os.path.basename(organize_path)}.", post_action="enter_wake_mode")
+                ok, msg = FileManager.organize_files_automatically(path or "downloads")
+                if ok:
+                    self.speak(f"Sir, {msg}", post_action="enter_wake_mode")
                 else:
-                    self.speak(f"Failed to organize folder {os.path.basename(organize_path)}.", post_action="enter_wake_mode")
+                    self.speak(f"Sorry Sir, I could not organize the folder. {msg}", post_action="enter_wake_mode")
+
+            else:
+                self.speak(f"Sorry Sir, I don't know how to perform the file action '{action}'.", post_action="enter_wake_mode")
+
 
         # -- 4. ALARMS & REMINDERS INTENT --
         elif intent == "alarm_reminder":
