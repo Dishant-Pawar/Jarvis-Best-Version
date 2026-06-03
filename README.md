@@ -1,164 +1,302 @@
 # J.A.R.V.I.S. Desktop Assistant
 
-JARVIS (Just A Rather Very Intelligent System) is a complete, production-ready Python-based desktop assistant. Built with PyQt6 and integrated with the Google Gemini API, it provides system app launching, PC hardware controls, reminders, alarms, email automation, file operations, news/weather reports, and continuous wake-word listening.
+> **Just A Rather Very Intelligent System** — A production-ready Python voice assistant for Windows, built with PyQt6 and Google Gemini AI.
 
 ---
 
-## Key Features
-
-*   **Modern Floating UI**: Frameless, translucent dark glassmorphism widget that floats "always on top" with custom paint event audio waveform animations corresponding to Jarvis' active state.
-*   **Voice Control & Continuous Listening**: Uses background thread listeners to continuously capture speech. Wake word **"Hey Jarvis"** automatically triggers voice input capture.
-*   **AI Chat & Command Parsing**: Uses Gemini API to parse natural language commands into structured JSON calls and engages in contextual conversation.
-*   **Offline/Keyless Fallback Mode**: If your internet is down or the Gemini API key is missing, Jarvis automatically activates local rule-based intent parsing and fallback speech responses so the assistant remains functional.
-*   **Advanced PC Controls**: System volume up/down/mute, display brightness, screen captures, network adapter toggles (Wi-Fi, Bluetooth), locking PC, and power options (Sleep, Restart, Shutdown).
-*   **File Manager System**: Hands-free file/folder creations, deletions, renames, search, copy/paste clipboard operations, recent documents viewer, and an automatic directory organizer sorting documents, media, and executables.
-*   **Daily Scheduling Utilities**: Persistent alarm settings and text-to-speech reminder scheduling that survives application restarts.
-*   **Email & Communication**: Send SMTP emails and fetch recent mailbox headings using IMAP, with interactive voice prompting for missing parameters (e.g. email body).
-*   **Voice Typing (Dictation Mode)**: Dictates voice input directly as keyboard strokes into the active focused window.
-
----
-
-## Directory Structure
-
-```
-jarvis/
-├── requirements.txt            # System dependencies
-├── README.md                   # Installation & usage document
-├── .env.example                # Example configurations
-└── jarvis/
-    ├── __init__.py
-    ├── main.py                 # Application startup script & global crash handler
-    ├── config/
-    │   ├── __init__.py
-    │   └── settings.py         # Path configs, .env loader, and defaults
-    ├── ui/
-    │   ├── __init__.py
-    │   ├── theme.py            # Glassmorphism styling and QSS specifications
-    │   └── floating_panel.py   # Floating QWidget UI & custom Waveform painter
-    ├── core/
-    │   ├── __init__.py
-    │   ├── assistant.py        # Central state machine orchestrator
-    │   └── command_parser.py   # Intent extraction router
-    ├── voice/
-    │   ├── __init__.py
-    │   ├── audio_listener.py   # Background continuous microphone listener
-    │   └── tts_engine.py       # Background queue-based Speech synthesis
-    ├── services/
-    │   ├── __init__.py
-    │   ├── gemini_service.py   # Gemini API connector & fallback rules
-    │   ├── weather_service.py  # wttr.in weather client
-    │   ├── news_service.py     # Google News XML/RSS crawler
-    │   ├── email_service.py    # SMTP/IMAP wrappers & email simulator
-    │   └── reminder_service.py # Alarm & reminder thread scheduler
-    ├── automation/
-    │   ├── __init__.py
-    │   ├── system_apps.py      # App launching utilities (Registry + standard paths)
-    │   ├── pc_control.py       # Volume, brightness, shell and power functions
-    │   ├── file_manager.py     # File I/O operations & auto-organizer
-    │   └── voice_typing.py     # Active window typing simulation
-    └── utils/
-        ├── __init__.py
-        └── logger.py           # Logging system writing to console & jarvis.log
-```
-
----
-
-## Requirements & Prerequisites
-
-1.  **Python 3.10+** (64-bit recommended for Windows compatibility).
-2.  **PyAudio (Microphone Input)**:
-    *   Installing PyAudio on Windows requires portaudio binaries. You can install it directly via pip (`pip install pyaudio`).
-    *   If pip fails to compile PyAudio, install it using precompiled wheels:
-        1. Download the PyAudio wheel matching your Python version from [Unofficial Windows Binaries](https://www.lfd.uci.edu/~gohlke/pythonlibs/#pyaudio) or direct python wheels repository.
-        2. Run: `pip install PyAudio-xxx.whl`.
-3.  **Windows OS**: Specifically designed and optimized for Windows APIs (using `winshell`, `pywin32`, and PowerShell wrappers).
-
----
-
-## Installation Steps
-
-1.  Clone or navigate to the JARVIS root folder (`d:\lasttry`).
-2.  Create a virtual environment:
-    ```powershell
-    python -m venv venv
-    ```
-3.  Activate the virtual environment:
-    ```powershell
-    venv\Scripts\activate
-    ```
-4.  Install requirements:
-    ```powershell
-    pip install -r requirements.txt
-    ```
-5.  Configure your environment:
-    *   Duplicate `.env.example` and rename it to `.env`.
-    *   Open `.env` and fill in your details:
-        ```env
-        GEMINI_API_KEY=AIzaSy...your_gemini_api_key_here
-        SENDER_EMAIL=your_real_gmail_address@gmail.com
-        SENDER_PASSWORD=your_gmail_app_password
-        DEFAULT_CITY=London
-        NEWS_COUNTRY=us
-        ```
-
----
-
-## How to Run
-
-Execute the package main script inside your virtual environment:
+## 🚀 Quick Start
 
 ```powershell
+# 1. Activate virtual environment
+venv\Scripts\activate
+
+# 2. Run Jarvis
 python -m jarvis.main
 ```
 
-Upon startup, the panel will appear floating above your windows. You will hear: *"Jarvis is online and ready, Sir."*
+Say **"Hey Jarvis"** → wait for *"Yes Sir, I'm listening."* → speak your command.
 
 ---
 
-## Core Voice Commands Reference
+## ✅ All Working Voice Commands
 
-To activate JARVIS, say **"Hey Jarvis"**. Once you hear **"Yes Sir, I'm listening."**, speak one of the following commands:
+### 🗂️ 1. File Operations
 
-### 1. System Applications
-*   *Open Notepad* / *Launch Notepad*
-*   *Open Calculator*
-*   *Open Command Prompt* / *Open Cmd*
-*   *Open File Explorer*
-*   *Open Control Panel*
-*   *Open Settings*
-*   *Open Camera*
-*   *Open Google Chrome* / *Launch Chrome*
-*   *Open VS Code*
+Say **"Hey Jarvis"** then speak any of the following:
 
-### 2. Hardware & PC Control
-*   *Volume Up* / *Increase volume* (adjusts system volume +10%)
-*   *Volume Down* / *Decrease volume* (adjusts system volume -10%)
-*   *Mute Audio* / *Unmute Audio*
-*   *Brightness Increase* / *Increase brightness* (+15%)
-*   *Brightness Decrease* / *Decrease brightness* (-15%)
-*   *Take Screenshot* (saves a full capture onto your Desktop as `Screenshot_TIMESTAMP.png`)
-*   *Wi-Fi On* / *Wi-Fi Off*
-*   *Bluetooth On* / *Bluetooth Off*
-*   *Lock PC* / *Lock computer*
-*   *Sleep Mode* / *Put PC to sleep*
-*   *Restart PC* (warns and restarts PC in 10 seconds)
-*   *Shutdown PC* (warns and shuts down PC in 10 seconds)
+| What You Say | What Jarvis Does |
+|---|---|
+| `"create a file named notes.txt"` | Creates `notes.txt` on your Desktop |
+| `"create a new file report.txt"` | Creates `report.txt` on your Desktop |
+| `"create folder named Projects"` | Creates `Projects/` folder on your Desktop |
+| `"create a new folder Work"` | Creates `Work/` folder on your Desktop |
+| `"open downloads folder"` | Opens Downloads in File Explorer |
+| `"open folder Documents"` | Opens Documents folder in File Explorer |
+| `"open folders document"` | Opens Documents folder (voice variation) |
+| `"open file notes.txt"` | Opens `notes.txt` with its default app |
+| `"open report.pdf"` | Opens `report.pdf` directly (auto-detects extension) |
+| `"move notes.txt to Desktop"` | Moves file to Desktop |
+| `"move report.pdf to Downloads"` | Moves file to Downloads |
+| `"move budget.xlsx to Documents"` | Moves file to Documents |
+| `"rename notes.txt to backup.txt"` | Renames the file |
+| `"rename folder Work to Office"` | Renames a folder |
+| `"delete file temp.txt"` | Deletes the file (searches common folders) |
+| `"delete folder Old Backup"` | Deletes the entire folder |
+| `"search files for budget"` | Searches Desktop/Downloads/Documents/Pictures/Videos/Music |
+| `"find files for report"` | Same as search |
+| `"list desktop"` | Lists all items on Desktop by voice |
+| `"list downloads"` | Lists all items in Downloads |
+| `"show contents of documents"` | Lists all items in Documents |
+| `"copy file notes.txt"` | Copies file to internal clipboard |
+| `"paste to Desktop"` | Pastes clipboard file to Desktop |
+| `"paste to Downloads"` | Pastes clipboard file to Downloads |
+| `"show recent files"` | Reads out your 3 most recently modified files |
+| `"organize downloads"` | Auto-sorts Downloads into Images/Documents/Audio/Video/Archives/Code |
+| `"organize desktop"` | Auto-sorts Desktop by file type |
 
-### 3. Advanced AI Capabilities
-*   *What's the weather today?* / *What is the weather in Paris?*
-*   *Tell me latest news* / *Give me headlines*
-*   *Set Reminder* -> *"Remind me to call Rahul at 6 PM"* (relative times are parsed by Gemini)
-*   *List Reminders* / *Delete Reminder matching 'call'*
-*   *Set Alarm for 08:30* / *Stop Alarm* / *Delete Alarm for 08:30*
-*   *Send email to john@example.com* -> Jarvis asks: *"What should I write?"* -> Dictate body -> Sends.
-*   *Read email details* / *Check recent emails*
-*   *Start voice typing* / *Start typing* (converts all spoken sentences directly to active cursor keystrokes. Say *"Stop voice typing"* to exit).
-*   *General AI conversation*: Ask questions like *"Who are you?"*, *"Why is the sky blue?"*, or *"Help me write a Python function"*.
+> **Smart Search**: Jarvis automatically looks for files across Desktop, Downloads, Documents, Pictures, Videos, and Music — you don't need to know the full path.
 
 ---
 
-## Under the Hood (Developer Notes)
+### 🖥️ 2. System Applications
 
-*   **Thread Safety**: The TTS Engine runs in its own thread managing queue processing. Background speech listening is executed inside a `QThread`. Communication between the UI, the speech engine, and the listener is completed through Qt's thread-safe Signal & Slot mechanisms.
-*   **Windows COM Initialization**: Windows Speech APIs (`pyttsx3`) and shell links (`winshell`) use COM interface bindings. These require active initialization using `pythoncom.CoInitialize()` when launched in background worker threads. This has been fully configured inside `tts_engine.py`, `pc_control.py`, `file_manager.py`, and `reminder_service.py` to prevent thread crashes.
-*   **State Machine Coordinator**: Located in `jarvis/core/assistant.py`. It guarantees that speech listeners are fully deactivated during active TTS audio playback, eliminating self-hearing loops.
+| What You Say | What Jarvis Does |
+|---|---|
+| `"open Notepad"` | Opens Notepad |
+| `"open Calculator"` | Opens Calculator |
+| `"open Command Prompt"` / `"open cmd"` | Opens Command Prompt |
+| `"open File Explorer"` | Opens File Explorer |
+| `"open Control Panel"` | Opens Control Panel |
+| `"open Settings"` | Opens Windows Settings |
+| `"open Camera"` | Opens Camera app |
+| `"open Chrome"` / `"open Google Chrome"` | Opens Google Chrome |
+| `"open VS Code"` / `"open Visual Studio Code"` | Opens VS Code |
+
+---
+
+### ⚙️ 3. PC Hardware Control
+
+| What You Say | What Jarvis Does |
+|---|---|
+| `"volume up"` / `"increase volume"` | Increases system volume by 10% |
+| `"volume down"` / `"decrease volume"` | Decreases system volume by 10% |
+| `"mute"` | Mutes audio |
+| `"unmute"` | Unmutes audio |
+| `"increase brightness"` / `"brighter"` | Increases display brightness by 15% |
+| `"decrease brightness"` / `"dim"` | Decreases display brightness by 15% |
+| `"take screenshot"` / `"take screen shot"` | Saves screenshot to Desktop as `Screenshot_TIMESTAMP.png` |
+| `"WiFi on"` / `"enable WiFi"` / `"turn on WiFi"` | Enables Wi-Fi adapter |
+| `"WiFi off"` / `"disable WiFi"` / `"turn off WiFi"` | Disables Wi-Fi adapter |
+| `"Bluetooth on"` / `"enable Bluetooth"` | Enables Bluetooth |
+| `"Bluetooth off"` / `"disable Bluetooth"` | Disables Bluetooth |
+| `"lock PC"` / `"lock computer"` | Locks the workstation |
+| `"sleep"` | Puts PC to sleep |
+| `"restart"` / `"reboot"` | Restarts PC |
+| `"shutdown"` / `"shut down"` | Shuts down PC |
+
+---
+
+### 🌤️ 4. Weather
+
+| What You Say | What Jarvis Does |
+|---|---|
+| `"weather in Pune"` | Reads weather report for Pune |
+| `"what is the weather in Mumbai"` | Reads weather for Mumbai |
+| `"what's the weather today in Delhi"` | Reads current weather |
+| `"tell me the weather report of London"` | Reads full weather report |
+| `"temperature in New York"` | Reads temperature for New York |
+| `"weather forecast for Paris"` | Reads weather forecast |
+
+---
+
+### 📰 5. News
+
+| What You Say | What Jarvis Does |
+|---|---|
+| `"news"` | Reads latest top news headlines |
+| `"latest news"` | Reads top headlines |
+| `"give me headlines"` | Reads news |
+| `"what's in the news"` | Reads news |
+
+---
+
+### ⏰ 6. Alarms & Reminders
+
+| What You Say | What Jarvis Does |
+|---|---|
+| `"remind me to call Rahul at 6 PM"` | Sets reminder for 6:00 PM today |
+| `"remind me to take medicine in 30 minutes"` | Sets reminder 30 min from now |
+| `"list reminders"` / `"show reminders"` | Reads all active reminders |
+| `"delete reminder call"` | Deletes reminder matching keyword |
+| `"set alarm for 08:30"` | Sets alarm at 08:30 |
+| `"set alarm for 7am"` | Sets alarm at 07:00 |
+| `"stop alarm"` | Stops the currently ringing alarm |
+| `"delete alarm for 08:30"` | Removes a scheduled alarm |
+
+---
+
+### 📧 7. Email
+
+| What You Say | What Jarvis Does |
+|---|---|
+| `"send email to john@example.com"` | Starts email flow → Jarvis asks for message body |
+| `"read emails"` / `"check emails"` | Reads recent email subjects from inbox |
+
+> **How email sending works:**
+> 1. Say `"send email to john@example.com"`
+> 2. Jarvis asks: *"What should I write?"*
+> 3. Dictate your message
+> 4. Jarvis sends the email automatically
+
+---
+
+### ⌨️ 8. Voice Typing (Dictation Mode)
+
+| What You Say | What Jarvis Does |
+|---|---|
+| `"start voice typing"` / `"start typing"` | Enters dictation mode — everything you say is typed into the active window |
+| `"stop voice typing"` / `"stop dictation"` | Exits dictation mode |
+
+> Click on any text field (Notepad, browser, etc.) first, then activate voice typing.
+
+---
+
+### 💬 9. General AI Conversation
+
+Say anything not matching the above commands and Jarvis will answer using Gemini AI:
+
+- *"Who are you?"*
+- *"What can you do?"*
+- *"Why is the sky blue?"*
+- *"Help me write a Python function"*
+- *"Tell me a joke"*
+- *"Hello"* / *"Hi"* / *"Thank you"*
+
+---
+
+## 📁 Folder Aliases (use in any file command)
+
+These words are understood as folder shortcuts:
+
+| You Say | Maps To |
+|---|---|
+| `desktop` | `C:\Users\<you>\Desktop` |
+| `downloads` | `C:\Users\<you>\Downloads` |
+| `documents` | `C:\Users\<you>\Documents` |
+| `pictures` | `C:\Users\<you>\Pictures` |
+| `videos` | `C:\Users\<you>\Videos` |
+| `music` | `C:\Users\<you>\Music` |
+
+---
+
+## 📂 Organize Files — Category Map
+
+When you say *"organize downloads"*, files are sorted into:
+
+| Subfolder | File Types |
+|---|---|
+| `Images/` | `.jpg` `.jpeg` `.png` `.gif` `.bmp` `.webp` `.svg` |
+| `Documents/` | `.pdf` `.doc` `.docx` `.xls` `.xlsx` `.ppt` `.pptx` `.txt` `.csv` `.md` |
+| `Audio/` | `.mp3` `.wav` `.aac` `.flac` `.ogg` `.m4a` |
+| `Video/` | `.mp4` `.mkv` `.avi` `.mov` `.wmv` `.webm` |
+| `Archives/` | `.zip` `.rar` `.7z` `.tar` `.gz` |
+| `Executables/` | `.exe` `.msi` `.bat` `.cmd` `.ps1` |
+| `Code/` | `.py` `.js` `.ts` `.html` `.css` `.json` `.xml` `.java` `.cpp` |
+| `Others/` | Everything else |
+
+---
+
+## 🏗️ Project Structure
+
+```
+d:\lasttry\
+├── .env                        # Your API keys and settings
+├── .env.example                # Template for .env
+├── requirements.txt            # Python dependencies
+├── README.md                   # This file
+└── jarvis/
+    ├── main.py                 # App startup & crash handler
+    ├── config/
+    │   └── settings.py         # Path configs, .env loader
+    ├── ui/
+    │   ├── theme.py            # Glassmorphism styles
+    │   └── floating_panel.py   # Floating UI & waveform painter
+    ├── core/
+    │   ├── assistant.py        # Central state machine
+    │   └── command_parser.py   # Intent routing
+    ├── voice/
+    │   ├── audio_listener.py   # Background microphone listener
+    │   ├── tts_engine.py       # Text-to-speech engine (subprocess isolated)
+    │   └── speak_subprocess.py # Isolated pyttsx3 speech process
+    ├── services/
+    │   ├── gemini_service.py   # Local-first intent parser + Gemini AI
+    │   ├── weather_service.py  # wttr.in weather client
+    │   ├── news_service.py     # Google News RSS crawler
+    │   ├── email_service.py    # SMTP/IMAP wrappers
+    │   └── reminder_service.py # Alarm & reminder scheduler
+    ├── automation/
+    │   ├── system_apps.py      # App launching utilities
+    │   ├── pc_control.py       # Volume, brightness, power control
+    │   ├── file_manager.py     # Full file/folder management
+    │   └── voice_typing.py     # Keyboard stroke simulation
+    └── utils/
+        └── logger.py           # Logging to console & logs/jarvis.log
+```
+
+---
+
+## ⚙️ Installation
+
+```powershell
+# 1. Create virtual environment
+python -m venv venv
+
+# 2. Activate it
+venv\Scripts\activate
+
+# 3. Install all dependencies
+pip install -r requirements.txt
+
+# 4. Copy and configure environment
+copy .env.example .env
+# Edit .env and fill in your keys
+```
+
+### `.env` Configuration
+
+```env
+GEMINI_API_KEY=AIzaSy...your_key_here
+SENDER_EMAIL=your_gmail@gmail.com
+SENDER_PASSWORD=your_gmail_app_password
+DEFAULT_CITY=Pune
+NEWS_COUNTRY=in
+WAKE_WORD=hey jarvis
+```
+
+---
+
+## 🔧 Requirements
+
+- **Windows 10/11** (64-bit)
+- **Python 3.10+**
+- **Microphone** (for voice input)
+- **Speaker/Headphones** (for voice output)
+- **Google Gemini API key** (free at [aistudio.google.com](https://aistudio.google.com)) — *optional, works offline too*
+
+---
+
+## 💡 Tips
+
+- **Offline mode**: All file, PC control, app, and weather commands work **without** a Gemini API key using the built-in local parser.
+- **Gemini API** is only used for free-form conversation and natural-language time parsing (e.g. *"remind me in 5 minutes"*).
+- **Log file**: Check `logs/jarvis.log` if a command fails — it shows exactly what Jarvis heard and why it failed.
+- **Wake word variations**: Saying *"hey jar"* or similar will also trigger Jarvis if close enough to the wake word.
+
+---
+
+## 📝 Developer Notes
+
+- **TTS isolation**: `pyttsx3` runs in a separate subprocess (`speak_subprocess.py`) to avoid COM/Qt thread conflicts on Windows.
+- **Local-first parsing**: The intent parser runs rule-based matching first (instant, no API). Gemini is only called for chat and time-relative reminders.
+- **Thread safety**: All UI↔backend communication uses Qt signals/slots across threads.
+- **Log location**: `d:\lasttry\logs\jarvis.log`
