@@ -1,0 +1,15 @@
+PyQt6>=6.4.0
+SpeechRecognition>=3.10.0
+PyAudio>=0.2.13
+pyttsx3>=2.90
+google-generativeai>=0.3.0
+pyautogui>=0.9.54
+keyboard>=0.13.5
+mouse>=0.7.1
+psutil>=5.9.0
+pycaw>=20220416
+screen_brightness_control>=0.2.1
+winshell>=0.6
+pywin32>=306
+requests>=2.31.0
+python-dotenv>=1.0.0
