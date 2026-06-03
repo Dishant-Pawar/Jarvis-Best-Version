@@ -152,8 +152,8 @@ class GeminiService:
 
     def _fallback_intent_parser(self, text: str) -> Dict[str, Any]:
         """Rule-based simple intent parser when Gemini is unavailable."""
-        text_l = text.lower()
-        logger.debug(f"Executing rule-based local command matching for: '{text}'")
+        text_l = text.lower().replace("-", "")
+        logger.debug(f"Executing rule-based local command matching for: '{text}' (normalized: '{text_l}')")
         
         # 1. Apps
         if "notepad" in text_l:

@@ -79,37 +79,48 @@ class PCControl:
 
     @staticmethod
     def take_screenshot() -> str:
-        """Take a full-screen screenshot and save it to the user's Desktop."""
+        """Take a full-screen screenshot and save it to the project's screenshots directory.
+        Returns the file path of the saved screenshot, or an empty string on failure.
+        """
         try:
-            import pyautogui
-            desktop_dir = os.path.join(os.path.expanduser("~"), "Desktop")
-            filename = f"Screenshot_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-            filepath = os.path.join(desktop_dir, filename)
-            
-            logger.info(f"Taking screenshot: {filepath}")
+            # Import pyautogui lazily to avoid import errors if the library is missing.
+            try:
+                import pyautogui
+            except ImportError as ie:
+                logger.error(f"pyautogui is required for screenshots but is not installed: {ie}")
+                return ""
+
+            # Determine the screenshots directory within the project.
+            screenshots_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "screenshots"))
+            os.makedirs(screenshots_dir, exist_ok=True)
+
+            filename = f"screenshot_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+            filepath = os.path.join(screenshots_dir, filename)
+            logger.info(f"Capturing screenshot to {filepath}")
+
             screenshot = pyautogui.screenshot()
             screenshot.save(filepath)
             return filepath
         except Exception as e:
             logger.error(f"Failed to take screenshot: {e}")
             return ""
+    @staticmethod
+    def screenshort() -> str:
+        """Alias for take_screenshot."""
+        return PCControl.take_screenshot()
 
     @staticmethod
     def toggle_wifi(enable: bool) -> bool:
-        """Enable or disable Wi-Fi adapter using powershell/netsh."""
+        """Enable or disable Wi-Fi adapter using the Windows Radio API via PowerShell script."""
         try:
-            status = "enabled" if enable else "disabled"
-            logger.info(f"Turning Wi-Fi {status}")
-            # Try netsh (which may require admin depending on OS configuration)
-            cmd = f'netsh interface set interface name="Wi-Fi" admin={status}'
+            state = "On" if enable else "Off"
+            logger.info(f"Turning Wi-Fi {state}")
+            script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "toggle_radio.ps1"))
+            cmd = f'powershell -ExecutionPolicy Bypass -File "{script_path}" -RadioKind WiFi -State {state}'
             res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-            if res.returncode == 0:
-                return True
-                
-            # Try powershell fallback
-            ps_status = "Enable" if enable else "Disable"
-            ps_cmd = f'powershell -Command "{ps_status}-NetAdapter -Name \'Wi-Fi\' -Confirm:$false"'
-            res = subprocess.run(ps_cmd, shell=True, capture_output=True, text=True)
+            logger.info(f"WiFi toggle script stdout: {res.stdout.strip()}")
+            if res.returncode != 0:
+                logger.error(f"WiFi toggle script error: {res.stderr.strip()}")
             return res.returncode == 0
         except Exception as e:
             logger.error(f"Failed to toggle Wi-Fi: {e}")
@@ -117,23 +128,16 @@ class PCControl:
 
     @staticmethod
     def toggle_bluetooth(enable: bool) -> bool:
-        """Enable or disable Bluetooth radio using Powershell."""
+        """Enable or disable Bluetooth adapter using the Windows Radio API via PowerShell script."""
         try:
-            logger.info(f"Turning Bluetooth {'on' if enable else 'off'}")
-            # Windows Bluetooth control is exposed via Windows.Devices.Radios API.
-            # We can invoke it from Powershell.
-            ps_status = "On" if enable else "Off"
-            # Command imports Assemblies to toggle Bluetooth radio
-            ps_script = (
-                "[void][Reference.Assembly]::LoadWithPartialName('System.Runtime.WindowsRuntime'); "
-                "$asb = [System.Runtime.InteropServices.WindowsRuntime.WebAuthenticationBroker]; "
-                "$radioType = [Windows.Devices.Radios.RadioKind]::Bluetooth; "
-                "$radios = [Windows.Devices.Radios.Radio]::GetRadiosAsync().GetResults(); "
-                f"$bt = $radios | Where-Object {{ $_.Kind -eq $radioType }}; "
-                f"if ($bt) {{ $bt.SetStateAsync([Windows.Devices.Radios.RadioState]::{ps_status}).GetResults(); }}"
-            )
-            cmd = f'powershell -Command "{ps_script}"'
+            state = "On" if enable else "Off"
+            logger.info(f"Turning Bluetooth {state}")
+            script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "toggle_radio.ps1"))
+            cmd = f'powershell -ExecutionPolicy Bypass -File "{script_path}" -RadioKind Bluetooth -State {state}'
             res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+            logger.info(f"Bluetooth toggle script stdout: {res.stdout.strip()}")
+            if res.returncode != 0:
+                logger.error(f"Bluetooth toggle script error: {res.stderr.strip()}")
             return res.returncode == 0
         except Exception as e:
             logger.error(f"Failed to toggle Bluetooth: {e}")
