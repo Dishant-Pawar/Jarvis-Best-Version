@@ -142,10 +142,13 @@ class Assistant(QObject):
     @pyqtSlot(str)
     def _on_tts_started(self, text: str):
         self.status_changed.emit("Speaking...")
+        # Emit speech_status_changed so the waveform animates in speaking state
+        self.speech_status_changed.emit("speaking")
 
     @pyqtSlot(str)
     def _on_tts_finished(self, text: str):
         self.status_changed.emit("Idle")
+        self.speech_status_changed.emit("idle")
         
         # Handle registered callbacks
         action = self.post_speak_action

@@ -262,10 +262,52 @@ class GeminiService:
             return {"intent": "alarm_reminder", "action": "set_alarm", "params": {"time_hhmm": "08:00", "label": "Alarm"}}
 
         # 7. Weather
-        elif "weather" in text_l:
-            # "weather in london"
-            city = text_l.replace("what's the weather today?", "").replace("what is the weather", "").replace("weather", "").replace("in ", "").strip()
+        elif "weather" in text_l or "temp" in text_l or "temperature" in text_l:
+            import re
+            clean_text = text_l
+
+            # Step 1: Remove multi-word filler phrases (order longest first)
+            filler_phrases = [
+                "what is the weather today in", "what is the weather today",
+                "what is the weather in", "what is the weather of", "what is the weather",
+                "what's the weather today in", "what's the weather today",
+                "what's the weather in", "what's the weather of", "what's the weather",
+                "tell me the weather report of", "tell me the weather report in",
+                "tell me the weather report for", "tell me the weather report",
+                "tell me the weather in", "tell me the weather of",
+                "tell me the weather for", "tell me the weather",
+                "tell me about the weather in", "tell me about the weather",
+                "how is the weather in", "how is the weather",
+                "tell weather report of", "tell weather report in",
+                "tell weather report for", "tell weather report",
+                "weather report of", "weather report in", "weather report for", "weather report",
+                "weather forecast for", "weather forecast in", "weather forecast of", "weather forecast",
+                "weather today in", "weather today of", "weather today",
+                "what's the temperature in", "what is the temperature in",
+                "temperature in", "temperature of", "temperature",
+                "weather in", "weather of", "weather for", "weather",
+                "tell me", "tell", "report", "temp",
+            ]
+            for phrase in sorted(filler_phrases, key=len, reverse=True):
+                clean_text = clean_text.replace(phrase, " ")
+
+            # Step 2: Strip leftover single filler words from start/end
+            filler_words = {"in", "of", "for", "at", "the", "me", "a", "about", "is", "are"}
+            words = clean_text.split()
+            while words and words[0] in filler_words:
+                words.pop(0)
+            while words and words[-1] in filler_words:
+                words.pop()
+            clean_text = " ".join(words)
+
+            # Step 3: Remove any stray non-alphabetic chars (except spaces and hyphens)
+            clean_text = re.sub(r"[^a-z\s\-]", "", clean_text).strip()
+
+            city = clean_text.strip()
+            logger.debug(f"Extracted city from weather query: '{city}'")
             return {"intent": "weather", "action": "get_weather", "params": {"city": city if city else None}}
+
+
 
         # 8. News
         elif "news" in text_l:

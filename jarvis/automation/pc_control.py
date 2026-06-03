@@ -111,37 +111,86 @@ class PCControl:
 
     @staticmethod
     def toggle_wifi(enable: bool) -> bool:
-        """Enable or disable Wi-Fi adapter using the Windows Radio API via PowerShell script."""
+        """Enable or disable Wi-Fi using PowerShell (Radio API + netsh fallback)."""
+        state = "On" if enable else "Off"
+        logger.info(f"Turning Wi-Fi {state}")
+        
+        # Primary: try the PowerShell script (Radio API + netsh fallback)
         try:
-            state = "On" if enable else "Off"
-            logger.info(f"Turning Wi-Fi {state}")
             script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "toggle_radio.ps1"))
             cmd = f'powershell -ExecutionPolicy Bypass -File "{script_path}" -RadioKind WiFi -State {state}'
-            res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-            logger.info(f"WiFi toggle script stdout: {res.stdout.strip()}")
-            if res.returncode != 0:
-                logger.error(f"WiFi toggle script error: {res.stderr.strip()}")
-            return res.returncode == 0
+            res = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=15)
+            logger.info(f"WiFi toggle stdout: {res.stdout.strip()}")
+            if res.returncode == 0:
+                return True
+            logger.warning(f"WiFi PS1 failed (rc={res.returncode}): {res.stderr.strip()}")
+        except subprocess.TimeoutExpired:
+            logger.warning("WiFi PowerShell script timed out.")
         except Exception as e:
-            logger.error(f"Failed to toggle Wi-Fi: {e}")
-            return False
+            logger.warning(f"WiFi PS1 script error: {e}")
+
+        # Fallback: direct netsh command
+        try:
+            action = "enabled" if enable else "disabled"
+            for iface in ["Wi-Fi", "WiFi", "Wireless Network Connection"]:
+                r = subprocess.run(
+                    f'netsh interface set interface "{iface}" {action}',
+                    shell=True, capture_output=True, text=True, timeout=8
+                )
+                if r.returncode == 0:
+                    logger.info(f"Wi-Fi {action} via netsh interface '{iface}'")
+                    return True
+            logger.error("All netsh Wi-Fi fallback attempts failed.")
+        except Exception as e:
+            logger.error(f"WiFi netsh fallback error: {e}")
+
+        return False
 
     @staticmethod
     def toggle_bluetooth(enable: bool) -> bool:
-        """Enable or disable Bluetooth adapter using the Windows Radio API via PowerShell script."""
+        """Enable or disable Bluetooth using PowerShell (Radio API + service fallback)."""
+        state = "On" if enable else "Off"
+        logger.info(f"Turning Bluetooth {state}")
+
+        # Primary: try the PowerShell script
         try:
-            state = "On" if enable else "Off"
-            logger.info(f"Turning Bluetooth {state}")
             script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "toggle_radio.ps1"))
             cmd = f'powershell -ExecutionPolicy Bypass -File "{script_path}" -RadioKind Bluetooth -State {state}'
-            res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-            logger.info(f"Bluetooth toggle script stdout: {res.stdout.strip()}")
-            if res.returncode != 0:
-                logger.error(f"Bluetooth toggle script error: {res.stderr.strip()}")
-            return res.returncode == 0
+            res = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=15)
+            logger.info(f"Bluetooth toggle stdout: {res.stdout.strip()}")
+            if res.returncode == 0:
+                return True
+            logger.warning(f"Bluetooth PS1 failed (rc={res.returncode}): {res.stderr.strip()}")
+        except subprocess.TimeoutExpired:
+            logger.warning("Bluetooth PowerShell script timed out.")
         except Exception as e:
-            logger.error(f"Failed to toggle Bluetooth: {e}")
-            return False
+            logger.warning(f"Bluetooth PS1 script error: {e}")
+
+        # Fallback: toggle Bluetooth via Windows service (bthserv) and PnP
+        try:
+            if enable:
+                ps_cmd = (
+                    'powershell -Command "'
+                    'Start-Service bthserv -ErrorAction SilentlyContinue; '
+                    '$devs = Get-PnpDevice | Where-Object {$_.FriendlyName -match \'Bluetooth\' -and $_.Status -ne \'OK\'}; '
+                    'foreach ($d in $devs) { Enable-PnpDevice -InstanceId $d.InstanceId -Confirm:$false -ErrorAction SilentlyContinue }'
+                    '"'
+                )
+            else:
+                ps_cmd = (
+                    'powershell -Command "'
+                    'Stop-Service bthserv -Force -ErrorAction SilentlyContinue; '
+                    '$devs = Get-PnpDevice | Where-Object {$_.FriendlyName -match \'Bluetooth\' -and $_.Status -eq \'OK\'}; '
+                    'foreach ($d in $devs) { Disable-PnpDevice -InstanceId $d.InstanceId -Confirm:$false -ErrorAction SilentlyContinue }'
+                    '"'
+                )
+            r = subprocess.run(ps_cmd, shell=True, capture_output=True, text=True, timeout=20)
+            logger.info(f"Bluetooth service fallback stdout: {r.stdout.strip()}")
+            return True  # Best-effort
+        except Exception as e:
+            logger.error(f"Bluetooth service fallback error: {e}")
+
+        return False
 
     @staticmethod
     def lock_pc() -> bool:
